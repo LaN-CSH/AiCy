@@ -6,14 +6,22 @@ from dotenv import load_dotenv
 from gtts import gTTS
 from ai_core.openai import chatgpt_response
 import json
+import elevenlabs
+from elevenlabs import VoiceSettings
+from elevenlabs.client import ElevenLabs
+import requests
 
 def run_bot():
     load_dotenv()
     TOKEN = os.getenv('TOKEN')
+    EL_TOKEN = os.getenv('ELEVENLABS')
+    aicy_voice1 = os.getenv('AICY_VOICEVOX_L')
+    aicy_voice2 = os.getenv('AICY_VC_A')
+
     intents = discord.Intents.default()
     intents.message_content = True
     client = discord.Client(intents=intents)
-
+    el_client = ElevenLabs()
     queues = {}
     voice_clients = {}
     yt_dl_options = {"format": "bestaudio/best"}
@@ -92,7 +100,7 @@ def run_bot():
                     print(conv)
                 # data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
                 text, conv = chatgpt_response(input_text, conv)
-
+                text = text.replace("*","")
                 # Serializing json
                 json_object = json.dumps(conv, ensure_ascii=False)
                 
@@ -100,8 +108,42 @@ def run_bot():
                 with open("conv.json", "w") as outfile:
                     outfile.write(json_object)
                 
-                myobj = gTTS(text=text, lang="ko", slow=False)
-                myobj.save("tts-audio.mp3")
+                # myobj = gTTS(text=text, lang="ko", slow=False)
+                # myobj = client.text_to_speech.convert(
+                #         voice_id="pMsXgVXv3BLzUgSXRplE",
+                #         optimize_streaming_latency="0",
+                #         output_format="mp3_22050_32",
+                #         text=text,
+                #         voice_settings=VoiceSettings(
+                #             stability=0.1,
+                #             similarity_boost=0.3,
+                #             style=0.2,
+                #         ),
+                #     )
+                CHUNK_SIZE = 1024
+                url = "https://api.elevenlabs.io/v1/text-to-speech/edaoIXGiOsk7Opf9lAsF"
+
+                headers = {
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+                "xi-api-key": EL_TOKEN
+                }
+
+                data = {
+                "text": text,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.3
+                }
+                }
+
+                response = requests.post(url, json=data, headers=headers)
+                with open('tts-audio.mp3', 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                        if chunk:
+                            f.write(chunk)
+                # myobj.save("tts-audio.mp3")
                 # song = data['url']
                 # player = discord.FFmpegOpusAudio("tts-audio.mp3", **ffmpeg_options)
                 voice_clients[message.guild.id].play(discord.FFmpegPCMAudio(executable="C:/ffmpeg/ffmpeg.exe", source="tts-audio.mp3"))
