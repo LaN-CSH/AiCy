@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AiCy Viewer</title>
+
+  <!-- Cubism 4 Core (Live2D official) -->
+  <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+  <!-- PixiJS 6.5 (pixi-live2d-display compatible) -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.2/dist/browser/pixi.min.js"></script>
+  <!-- pixi-live2d-display (Cubism 4) -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/cubism4.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      overflow: hidden;
+      background: #0d0d1a;
+      font-family: 'Segoe UI', sans-serif;
+      color: #e0e0e0;
+    }
+
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #status-bar {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      background: rgba(15, 15, 30, 0.85);
+      border: 1px solid rgba(100, 120, 255, 0.25);
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 13px;
+      line-height: 1.6;
+      backdrop-filter: blur(8px);
+      min-width: 200px;
+      z-index: 10;
+    }
+
+    #status-bar .title {
+      font-weight: 700;
+      font-size: 15px;
+      color: #8892ff;
+      margin-bottom: 4px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .status-row .label { color: #888; }
+
+    .status-row .value { color: #ccc; font-weight: 500; }
+    .status-row .value.ok { color: #6fdc6f; }
+    .status-row .value.warn { color: #f0c040; }
+    .status-row .value.err { color: #f06060; }
+
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    .btn {
+      background: rgba(100, 120, 255, 0.2);
+      border: 1px solid rgba(100, 120, 255, 0.4);
+      color: #b0b8ff;
+      padding: 10px 22px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      backdrop-filter: blur(4px);
+    }
+
+    .btn:hover {
+      background: rgba(100, 120, 255, 0.35);
+      border-color: rgba(100, 120, 255, 0.6);
+      color: #fff;
+    }
+
+    .btn:active { transform: scale(0.96); }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: #0d0d1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 0.5s;
+    }
+
+    #loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(100, 120, 255, 0.2);
+      border-top-color: #6878ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .loading-text {
+      margin-top: 16px;
+      color: #888;
+      font-size: 14px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Loading Live2D model...</div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <div id="status-bar">
+    <div class="title">AiCy Viewer</div>
+    <div class="status-row">
+      <span class="label">Model</span>
+      <span class="value" id="st-model">loading...</span>
+    </div>
+    <div class="status-row">
+      <span class="label">State</span>
+      <span class="value" id="st-state">-</span>
+    </div>
+    <div class="status-row">
+      <span class="label">Lip Sync</span>
+      <span class="value" id="st-lipsync">off</span>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="btn" id="btn-speak" disabled>Test Speak</button>
+    <button class="btn" id="btn-motion" disabled>Random Motion</button>
+    <button class="btn" id="btn-expression" disabled>Expression</button>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
