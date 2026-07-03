@@ -27,7 +27,7 @@
     return MODELS[DEFAULT_MODEL_KEY];
   }
 
-  const TEST_AUDIO = "../tts-audio.mp3";
+  const TEST_AUDIO = "../audio/tts-audio.mp3";
   const WS_URL = "ws://localhost:8765";
   const BG_COLOR = 0x0d0d1a;
   const LIP_SYNC_SMOOTHING = 0.4;

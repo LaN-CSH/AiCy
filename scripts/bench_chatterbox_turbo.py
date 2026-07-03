@@ -14,7 +14,7 @@ t0 = time.time()
 m = ChatterboxTurboTTS.from_pretrained(device=DEV)
 print(f"load: {time.time() - t0:.1f}s")
 
-REF = "assets/aicy-voice-ref.wav"
+REF = "audio/aicy-voice-ref.wav"
 
 CASES = {
     "turbo-laugh": ("Okay wait, that is actually hilarious [laugh] "
@@ -28,7 +28,7 @@ for name, text in CASES.items():
     wav = m.generate(text, audio_prompt_path=REF)
     gen = time.time() - t0
     dur = wav.shape[-1] / m.sr
-    torchaudio.save(f"chatterbox-{name}.wav", wav.cpu(), m.sr)
+    torchaudio.save(f"audio/chatterbox-{name}.wav", wav.cpu(), m.sr)
     print(f"[{name}] gen {gen:.1f}s / audio {dur:.1f}s -> RTF {gen / dur:.2f}")
 
 if DEV == "cuda":

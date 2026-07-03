@@ -33,7 +33,7 @@ t0 = time.time()
 wav = en.generate(TEXT_EN, exaggeration=0.6)
 gen = time.time() - t0
 dur = wav.shape[-1] / en.sr
-torchaudio.save("chatterbox-en.wav", wav.cpu(), en.sr)
+torchaudio.save("audio/chatterbox-en.wav", wav.cpu(), en.sr)
 print(f"[EN] gen {gen:.1f}s / audio {dur:.1f}s -> RTF {gen / dur:.2f}")
 
 # 워밍업 이후 실측 (첫 호출엔 CUDA 커널 준비 오버헤드가 섞임)
@@ -64,10 +64,10 @@ t0 = time.time()
 wav = ml.generate(TEXT_KO, language_id="ko", exaggeration=0.6)
 gen = time.time() - t0
 dur = wav.shape[-1] / ml.sr
-torchaudio.save("chatterbox-ko.wav", wav.cpu(), ml.sr)
+torchaudio.save("audio/chatterbox-ko.wav", wav.cpu(), ml.sr)
 print(f"[KO] gen {gen:.1f}s / audio {dur:.1f}s -> RTF {gen / dur:.2f}")
 
 if DEV == "cuda":
     print(f"[KO] VRAM peak: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")
 
-print("saved: chatterbox-en.wav, chatterbox-ko.wav")
+print("saved: audio/chatterbox-en.wav, audio/chatterbox-ko.wav")
