@@ -42,6 +42,7 @@
     stState: document.getElementById("st-state"),
     stLipsync: document.getElementById("st-lipsync"),
     stWs: document.getElementById("st-ws"),
+    stTts: document.getElementById("st-tts"),
     btnSpeak: document.getElementById("btn-speak"),
     btnMotion: document.getElementById("btn-motion"),
     btnExpression: document.getElementById("btn-expression"),
@@ -118,6 +119,12 @@
   function onAudioEnd() {
     lipSyncActive = false;
     smoothedVolume = 0;
+    // 큐에 다음 문장이 있으면 끊김 없이 이어 재생
+    if (audioQueue.length > 0) {
+      playNextInQueue();
+      return;
+    }
+    queuePlaying = false;
     setStatus("state", "idle", "ok");
     setStatus("lipsync", "off");
     ui.btnSpeak.disabled = false;
@@ -232,13 +239,35 @@
   }
 
   // --- WebSocket: receive AiCy audio from Python backend ---
-  // Protocol: a JSON text frame {type:"speak", text, emotion} followed by a
-  // binary frame with the mp3 bytes. We play it through the same lip-sync path.
-  function playAudioBytes(arrayBuffer) {
+  // Protocol: a JSON text frame {type:"speak", text, emotion, seq, last, full?}
+  // followed by a binary mp3 frame. 백엔드가 문장 단위로 쪼개 보내므로
+  // 오디오 큐에 쌓아 끊김 없이 순차 재생한다 (자막은 재생 시점에 동기화).
+  let audioQueue = []; // {url, text}
+  let queuePlaying = false;
+
+  function enqueueAudio(arrayBuffer, meta) {
     var blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+    audioQueue.push({
+      url: URL.createObjectURL(blob),
+      text: (meta && meta.text) || "",
+    });
+    if (!queuePlaying) playNextInQueue();
+  }
+
+  function playNextInQueue() {
+    var item = audioQueue.shift();
+    if (!item) {
+      queuePlaying = false;
+      return;
+    }
+    queuePlaying = true;
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-    currentObjectUrl = URL.createObjectURL(blob);
-    speak(currentObjectUrl);
+    currentObjectUrl = item.url;
+    if (item.text) {
+      showCaption(item.text);
+      setStatus("state", "speaking: " + item.text.slice(0, 24), "ok");
+    }
+    speak(item.url);
   }
 
   function connectWS() {
@@ -256,23 +285,29 @@
         try {
           var msg = JSON.parse(ev.data);
           if (msg.type === "speak") pendingSpeak = msg;
+          if (msg.type === "config") {
+            // 백엔드가 알려주는 실제 구성 (TTS 백엔드 · 언어)
+            setStatus("tts", msg.tts + " · " + msg.lang, "ok");
+            console.log("Backend config:", msg);
+          }
         } catch (e) {
           console.warn("Bad control message:", ev.data);
         }
         return;
       }
-      // Binary frame = audio
-      if (pendingSpeak && pendingSpeak.text) {
-        setStatus("state", "speaking: " + pendingSpeak.text.slice(0, 24), "ok");
-        showCaption(pendingSpeak.text); // 자막 (방송 화면에도 유지됨)
-        resolveAicyMsg(pendingSpeak.text); // 채팅 패널 말풍선
-      }
+      // Binary frame = audio (문장 1개 분량)
+      var meta = pendingSpeak;
       pendingSpeak = null;
-      playAudioBytes(ev.data);
+      // 말풍선은 전체 답변으로 1회만 (첫 조각에 full 이 실려 옴)
+      if (meta && meta.full) {
+        resolveAicyMsg(meta.full);
+      }
+      enqueueAudio(ev.data, meta);
     };
 
     ws.onclose = function () {
       setStatus("ws", "disconnected", "warn");
+      setStatus("tts", "-");
       ws = null;
       if (pendingBubble) {
         pendingBubble.textContent = "(연결이 끊겨 답을 받지 못했어요)";

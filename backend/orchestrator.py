@@ -14,6 +14,7 @@ YouTube/Chzzk 입력을 끼우면 된다(기획서 3번 'ChatSource 인터페이
 
 import asyncio
 import json
+import re
 import sys
 
 import websockets
@@ -48,6 +49,13 @@ async def _handler(ws) -> None:
     """
     _clients.add(ws)
     print(f"[ws] 프론트 연결됨 (총 {len(_clients)})")
+    # 접속 즉시 백엔드 구성 통지 → 프론트 상태바에 표시
+    await ws.send(json.dumps({
+        "type": "config",
+        "tts": config.TTS_BACKEND,
+        "lang": config.LANG,
+        "llm": config.LLM_MODEL,
+    }))
     try:
         async for raw in ws:
             if isinstance(raw, bytes):
@@ -74,11 +82,23 @@ async def _handler(ws) -> None:
         print(f"[ws] 프론트 연결 해제 (총 {len(_clients)})")
 
 
-async def _broadcast_speak(text: str, audio: bytes, emotion: str = "neutral") -> None:
+async def _broadcast_speak(
+    text: str,
+    audio: bytes,
+    emotion: str = "neutral",
+    seq: int = 0,
+    last: bool = True,
+    full: str = None,
+) -> None:
+    """speak 이벤트 1개(문장 1개) 전송. full 은 첫 조각에만 실리는 전체 답변."""
     if not _clients:
         print("[ws] 연결된 프론트 없음 — http://localhost:8080/frontend/ 를 열어주세요.")
         return
-    meta = json.dumps({"type": "speak", "text": text, "emotion": emotion})
+    payload = {"type": "speak", "text": text, "emotion": emotion,
+               "seq": seq, "last": last}
+    if full is not None:
+        payload["full"] = full
+    meta = json.dumps(payload)
     dead = set()
     for ws in _clients:
         try:
@@ -90,8 +110,34 @@ async def _broadcast_speak(text: str, audio: bytes, emotion: str = "neutral") ->
     _clients.difference_update(dead)
 
 
+def _split_sentences(text: str):
+    """답변을 문장 단위로 분할. 너무 짧은 조각("오!")은 이웃 문장에 병합."""
+    parts = re.split(r"(?<=[.!?…])\s+", text.strip())
+    parts = [p.strip() for p in parts if p.strip()]
+    merged = []
+    for p in parts:
+        if merged and (len(p) < 6 or len(merged[-1]) < 6):
+            merged[-1] += " " + p
+        else:
+            merged.append(p)
+    return merged or [text]
+
+
+def _should_split() -> bool:
+    """느린(RTF>1) 백엔드에서만 자동으로 문장 분할을 켠다."""
+    v = config.TTS_SPLIT.lower()
+    if v == "auto":
+        return config.TTS_BACKEND == "chatterbox"
+    return v not in ("0", "false", "no")
+
+
 async def pipeline(user_text: str) -> None:
-    """한 번의 입력을 답변+음성까지 처리해 프론트로 보낸다."""
+    """한 번의 입력을 답변+음성까지 처리해 프론트로 보낸다.
+
+    문장 분할이 켜져 있으면 문장별로 [합성→전송]을 반복 —
+    프론트는 오디오 큐로 끊김 없이 이어 재생하고,
+    체감 지연은 '전체 생성'이 아니라 '첫 문장 생성' 시간이 된다.
+    """
     ok, user_text = safety.check_input(user_text)
     if not ok:
         print("[safety] 입력 차단됨")
@@ -102,8 +148,14 @@ async def pipeline(user_text: str) -> None:
     text = safety.clean_output(text)
     print(f"AiCy> [{emotion}] {text}")
 
-    audio = await _to_thread(tts.synthesize, text)
-    await _broadcast_speak(text, audio, emotion)
+    sentences = _split_sentences(text) if _should_split() else [text]
+    for i, sentence in enumerate(sentences):
+        audio = await _to_thread(tts.synthesize, sentence)
+        await _broadcast_speak(
+            sentence, audio, emotion,
+            seq=i, last=(i == len(sentences) - 1),
+            full=text if i == 0 else None,
+        )
 
 
 async def _console_loop() -> None:

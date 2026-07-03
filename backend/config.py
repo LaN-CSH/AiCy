@@ -45,6 +45,9 @@ class Config:
     # 목소리 피치 배율(SAPI 후처리). 1.0=원음, 1.15~1.35=어리고 높은 톤(미소녀).
     # 길이(속도)는 보정되어 유지된다.
     VOICE_PITCH = float(os.getenv("AICY_VOICE_PITCH", "1.0"))
+    # 문장 분할 파이프라이닝: auto(기본, 느린 백엔드=chatterbox만 켬) | 1 | 0
+    # 답변을 문장 단위로 생성·전송해 체감 지연을 '첫 문장 생성 시간'으로 줄인다.
+    TTS_SPLIT = os.getenv("AICY_TTS_SPLIT", "auto")
     # ffmpeg 경로: 빈값이면 PATH 및 C:/ffmpeg 자동 탐색
     FFMPEG = os.getenv("AICY_FFMPEG", "")
 
