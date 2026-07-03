@@ -17,7 +17,12 @@ class Brain:
                 "OPENAI_KEY 가 설정되지 않았습니다. .env 를 확인하세요."
             )
         self.client = OpenAI(api_key=config.OPENAI_KEY)
-        self._system = {"role": "system", "content": system_prompt(config.LANG)}
+        # 비언어 태그([laugh] 등)는 TTS가 연기 가능할 때(turbo)만 쓰도록 지시
+        nonverbal = config.TTS_BACKEND == "chatterbox_turbo"
+        self._system = {
+            "role": "system",
+            "content": system_prompt(config.LANG, nonverbal=nonverbal),
+        }
         self.conversation = [self._system]
 
     def respond(self, user_text: str) -> str:

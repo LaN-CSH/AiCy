@@ -46,10 +46,14 @@ python -m backend
 
 | 값 | 품질 | 속도 | 필요한 것 |
 |---|---|---|---|
+| `chatterbox_turbo` | 뉴럴 + **비언어 태그**([laugh] [sigh] [chuckle]) | **실시간보다 빠름** (RTF 0.4~0.6) | GPU + `.venv311` 실행. **영어 전용** |
+| `chatterbox` | 뉴럴(클로닝·감정조절, 한국어 O) | 답변당 ~4-8초 | GPU + **`.venv311\Scripts\python -m backend`로 실행** (첫 응답 전 모델 로드 ~20-30초) |
 | `edge` | 뉴럴(좋음) | 빠름 | 인터넷 (무료·무키) |
-| `chatterbox` | 뉴럴(더 좋음, 클로닝·감정조절) | 답변당 ~4-8초 | GPU + **`.venv311\Scripts\python -m backend`로 실행** (첫 응답 전 모델 로드 ~30초) |
 | `sapi` | 구식 | 빠름 | 없음 (완전 오프라인) |
 | `gtts`/`elevenlabs` | 중간/좋음 | 보통 | 인터넷 / API 키 |
+
+목소리 정체성은 `AICY_CB_REF_AUDIO` 참조 클립(5초+)이 정하고(제로샷 클로닝),
+`AICY_CB_EXAGGERATION`/`AICY_CB_CFG`/`AICY_VOICE_PITCH` 는 말투 미세조정이다.
 
 ## 다음 단계 (기획서 로드맵)
 - **2단계**: `orchestrator.pipeline()` 에 콘솔 대신 YouTube `ChatSource` 연결

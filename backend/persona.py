@@ -92,5 +92,22 @@ AICY_SYSTEM_PROMPT_EN = f"""You are 'AiCy', an AI VTuber created by the AI Cyber
 """
 
 
-def system_prompt(lang: str = "ko") -> str:
-    return AICY_SYSTEM_PROMPT_EN if lang == "en" else AICY_SYSTEM_PROMPT_KO
+# 비언어 발성 가이드 — TTS가 태그를 소리로 연기할 수 있을 때만(영어+turbo) 주입
+NONVERBAL_GUIDE_EN = """
+[Vocal acting — you can make real sounds]
+- You may insert these tags inline and they will be performed as actual sounds:
+  [laugh] [chuckle] [sigh]
+- Place a tag exactly where the sound belongs in the sentence.
+  e.g. "Okay that is actually so funny [laugh] I was not ready for that."
+- Use at most one per reply, and only when it genuinely fits. Never force it.
+"""
+
+
+def system_prompt(lang: str = "ko", nonverbal: bool = False) -> str:
+    """페르소나 프롬프트. nonverbal=True 면(영어 한정) 비언어 태그 가이드를 붙인다."""
+    if lang == "en":
+        prompt = AICY_SYSTEM_PROMPT_EN
+        if nonverbal:
+            prompt += NONVERBAL_GUIDE_EN
+        return prompt
+    return AICY_SYSTEM_PROMPT_KO

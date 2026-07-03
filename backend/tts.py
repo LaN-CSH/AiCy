@@ -135,6 +135,36 @@ def _chatterbox(text: str) -> bytes:
     return _tensor_to_mp3(wav, _cb_model.sr)
 
 
+_cb_turbo_model = None
+
+
+def _chatterbox_turbo(text: str) -> bytes:
+    """Chatterbox Turbo — 실시간보다 빠름(4060 Ti 실측 RTF 0.4~0.6) + 비언어 태그.
+
+    텍스트 안에 [laugh] [sigh] [chuckle] 같은 태그를 쓰면 소리로 연기한다.
+    ⚠️ 영어 전용. exaggeration/cfg 는 Turbo 에선 무시됨. .venv311 필요.
+    """
+    global _cb_turbo_model
+    import torch
+
+    if _cb_turbo_model is None:
+        if torch.cuda.is_available():
+            dev = "cuda"
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            dev = "mps"
+        else:
+            dev = "cpu"
+        from chatterbox.tts_turbo import ChatterboxTurboTTS
+        _cb_turbo_model = ChatterboxTurboTTS.from_pretrained(device=dev)
+        print(f"[tts] chatterbox-turbo 모델 상주 완료 ({dev}) — 영어 전용")
+
+    kwargs = {}
+    if config.CB_REF_AUDIO:
+        kwargs["audio_prompt_path"] = config.CB_REF_AUDIO
+    wav = _cb_turbo_model.generate(text, **kwargs)
+    return _tensor_to_mp3(wav, _cb_turbo_model.sr)
+
+
 def _edge(text: str) -> bytes:
     """MS Edge 뉴럴 음성(edge-tts). 클라우드지만 무료·키 불필요. 출력이 원래 mp3."""
     import edge_tts
@@ -239,6 +269,7 @@ def _gtts(text: str) -> bytes:
 
 _BACKENDS.update({
     "chatterbox": _chatterbox,
+    "chatterbox_turbo": _chatterbox_turbo,
     "edge": _edge,
     "sapi": _sapi,
     "gtts": _gtts,
