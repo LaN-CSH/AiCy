@@ -18,7 +18,7 @@ import sys
 
 import websockets
 
-from backend import safety, tts
+from backend import persona, safety, tts
 from backend.brain import Brain
 from backend.config import config
 
@@ -40,12 +40,35 @@ async def _to_thread(fn, *args):
 
 
 async def _handler(ws) -> None:
-    """프론트 연결 1개를 관리. 프론트가 보내는 메시지는 현재 무시(향후 제어용)."""
+    """프론트 연결 1개를 관리.
+
+    수신 프로토콜(프론트 → 백엔드, JSON 텍스트 프레임):
+        {"type": "chat",  "text": "..."}  → 파이프라인 실행(콘솔 입력과 동일 경로)
+        {"type": "reset"}                 → 대화기록 초기화
+    """
     _clients.add(ws)
     print(f"[ws] 프론트 연결됨 (총 {len(_clients)})")
     try:
-        async for _ in ws:
-            pass
+        async for raw in ws:
+            if isinstance(raw, bytes):
+                continue
+            try:
+                msg = json.loads(raw)
+            except ValueError:
+                continue
+            if msg.get("type") == "chat":
+                text = (msg.get("text") or "").strip()
+                if not text:
+                    continue
+                print(f"[chat] {text}")
+                try:
+                    await pipeline(text)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[pipeline] 오류: {exc}")
+            elif msg.get("type") == "reset":
+                if _brain is not None:
+                    _brain.reset()
+                print("[brain] 대화기록 초기화됨")
     finally:
         _clients.discard(ws)
         print(f"[ws] 프론트 연결 해제 (총 {len(_clients)})")
@@ -75,11 +98,12 @@ async def pipeline(user_text: str) -> None:
         return
 
     text = await _to_thread(_get_brain().respond, user_text)
+    emotion, text = persona.extract_emotion(text)  # "[happy] ..." → 표정 이벤트
     text = safety.clean_output(text)
-    print(f"AiCy> {text}")
+    print(f"AiCy> [{emotion}] {text}")
 
     audio = await _to_thread(tts.synthesize, text)
-    await _broadcast_speak(text, audio)
+    await _broadcast_speak(text, audio, emotion)
 
 
 async def _console_loop() -> None:

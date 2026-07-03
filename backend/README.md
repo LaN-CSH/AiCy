@@ -42,6 +42,15 @@ python -m backend
 - `/reset` — 대화기록 초기화
 - `/quit` — 종료
 
+## TTS 백엔드 (.env `AICY_TTS_BACKEND`)
+
+| 값 | 품질 | 속도 | 필요한 것 |
+|---|---|---|---|
+| `edge` | 뉴럴(좋음) | 빠름 | 인터넷 (무료·무키) |
+| `chatterbox` | 뉴럴(더 좋음, 클로닝·감정조절) | 답변당 ~4-8초 | GPU + **`.venv311\Scripts\python -m backend`로 실행** (첫 응답 전 모델 로드 ~30초) |
+| `sapi` | 구식 | 빠름 | 없음 (완전 오프라인) |
+| `gtts`/`elevenlabs` | 중간/좋음 | 보통 | 인터넷 / API 키 |
+
 ## 다음 단계 (기획서 로드맵)
 - **2단계**: `orchestrator.pipeline()` 에 콘솔 대신 YouTube `ChatSource` 연결
 - 감정태그 → 표정 이벤트(`emotion` 필드는 이미 프로토콜에 예약됨)

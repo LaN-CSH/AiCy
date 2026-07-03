@@ -6,13 +6,21 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv311/
 venv/
+
+# Model/package caches (heavy, local only)
+.cache/
 
 # Node
 node_modules/
 
 # Legacy runtime output
 conv.json
+
+# TTS 실험 산출물
+chatterbox-*.wav
+chatterbox-*.mp3
 
 # Live2D model assets — license unverified / third-party, keep local only
 frontend/models/

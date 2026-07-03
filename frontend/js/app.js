@@ -45,6 +45,10 @@
     btnSpeak: document.getElementById("btn-speak"),
     btnMotion: document.getElementById("btn-motion"),
     btnExpression: document.getElementById("btn-expression"),
+    chatInput: document.getElementById("chat-input"),
+    chatSend: document.getElementById("chat-send"),
+    chatMessages: document.getElementById("chat-messages"),
+    caption: document.getElementById("caption"),
   };
 
   // --- State ---
@@ -185,6 +189,48 @@
     });
   }
 
+  // --- Chat: messenger-style panel (user right / AiCy left) ---
+  let pendingBubble = null; // "생각 중..." 말풍선, 답변 도착 시 교체
+
+  function showCaption(text) {
+    ui.caption.textContent = text;
+    ui.caption.style.display = text ? "block" : "none";
+  }
+
+  function addMsg(role, text, pending) {
+    var el = document.createElement("div");
+    el.className = "msg " + role + (pending ? " pending" : "");
+    el.textContent = text;
+    ui.chatMessages.appendChild(el);
+    ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
+    return el;
+  }
+
+  function resolveAicyMsg(text) {
+    if (pendingBubble) {
+      pendingBubble.textContent = text;
+      pendingBubble.classList.remove("pending");
+      pendingBubble = null;
+    } else {
+      addMsg("aicy", text); // 콘솔 입력 등 패널 밖 경로로 온 답변
+    }
+    ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
+  }
+
+  function sendChat() {
+    var text = ui.chatInput.value.trim();
+    if (!text) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setStatus("ws", "not connected", "err");
+      return;
+    }
+    ws.send(JSON.stringify({ type: "chat", text: text }));
+    ui.chatInput.value = "";
+    addMsg("user", text);
+    pendingBubble = addMsg("aicy", "생각 중...", true);
+    setStatus("state", "thinking...", "warn");
+  }
+
   // --- WebSocket: receive AiCy audio from Python backend ---
   // Protocol: a JSON text frame {type:"speak", text, emotion} followed by a
   // binary frame with the mp3 bytes. We play it through the same lip-sync path.
@@ -218,6 +264,8 @@
       // Binary frame = audio
       if (pendingSpeak && pendingSpeak.text) {
         setStatus("state", "speaking: " + pendingSpeak.text.slice(0, 24), "ok");
+        showCaption(pendingSpeak.text); // 자막 (방송 화면에도 유지됨)
+        resolveAicyMsg(pendingSpeak.text); // 채팅 패널 말풍선
       }
       pendingSpeak = null;
       playAudioBytes(ev.data);
@@ -226,6 +274,11 @@
     ws.onclose = function () {
       setStatus("ws", "disconnected", "warn");
       ws = null;
+      if (pendingBubble) {
+        pendingBubble.textContent = "(연결이 끊겨 답을 받지 못했어요)";
+        pendingBubble.classList.remove("pending");
+        pendingBubble = null;
+      }
       setTimeout(connectWS, 2000); // auto-reconnect
     };
 
@@ -410,8 +463,19 @@
       }
     });
 
+    // Chat input
+    ui.chatSend.addEventListener("click", sendChat);
+    ui.chatInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendChat();
+      }
+      e.stopPropagation(); // 입력 중 전역 단축키 방지
+    });
+
     // Keyboard shortcuts
     document.addEventListener("keydown", function (e) {
+      if (e.target === ui.chatInput) return; // 채팅 입력 중엔 단축키 무시
       if (e.code === "Space" && !ui.btnSpeak.disabled) {
         e.preventDefault();
         speak(TEST_AUDIO);
@@ -427,13 +491,17 @@
         positionModel();
         setStatus("state", "view reset", "ok");
       }
+      if (e.code === "KeyH") {
+        // 방송(OBS 캡처)용: 컨트롤 UI 숨김/표시 (자막은 유지)
+        document.body.classList.toggle("ui-hidden");
+      }
     });
 
     // Hide loading overlay
     ui.loadingOverlay.classList.add("hidden");
 
     console.log("AiCy Viewer initialized.");
-    console.log("Shortcuts: [Space] speak, [M] motion, [E] expression, [R] reset view");
+    console.log("Shortcuts: [Space] speak, [M] motion, [E] expression, [R] reset view, [H] hide UI");
     console.log("Mouse: wheel = zoom, drag = move");
   }
 

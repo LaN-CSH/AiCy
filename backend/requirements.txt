@@ -3,3 +3,4 @@ python-dotenv>=1.0
 websockets>=12.0
 requests>=2.31
 gtts>=2.5
+edge-tts>=7.0
