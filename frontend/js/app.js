@@ -7,9 +7,28 @@
   const { Live2DModel } = PIXI.live2d;
 
   // --- Config ---
-  const SAMPLE_MODEL =
-    "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json";
+  // Swappable models. Override at runtime with ?model=<key|url>.
+  //   ?model=haru  → official Live2D sample (CDN, license-clean fallback)
+  //   ?model=<url> → any model3.json path/URL
+  // Default 'xl' is self-hosted under frontend/models/ (gitignored).
+  const MODELS = {
+    xl: { url: "models/xl/xl.model3.json", name: "xl (VTS)" },
+    haru: {
+      url: "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json",
+      name: "Haru (sample)",
+    },
+  };
+  const DEFAULT_MODEL_KEY = "xl";
+
+  function resolveModel() {
+    var q = new URLSearchParams(window.location.search).get("model");
+    if (q && MODELS[q]) return MODELS[q];
+    if (q) return { url: q, name: q };
+    return MODELS[DEFAULT_MODEL_KEY];
+  }
+
   const TEST_AUDIO = "../tts-audio.mp3";
+  const WS_URL = "ws://localhost:8765";
   const BG_COLOR = 0x0d0d1a;
   const LIP_SYNC_SMOOTHING = 0.4;
   const LIP_SYNC_GAIN = 4.0;
@@ -22,6 +41,7 @@
     stModel: document.getElementById("st-model"),
     stState: document.getElementById("st-state"),
     stLipsync: document.getElementById("st-lipsync"),
+    stWs: document.getElementById("st-ws"),
     btnSpeak: document.getElementById("btn-speak"),
     btnMotion: document.getElementById("btn-motion"),
     btnExpression: document.getElementById("btn-expression"),
@@ -38,6 +58,13 @@
   let smoothedVolume = 0;
   let mouthParamIndex = -1;
   let expressionIndex = 0;
+  let ws = null;
+  let pendingSpeak = null;
+  let currentObjectUrl = null;
+  let userAdjusted = false; // user zoomed/panned → don't auto-recenter on resize
+  let dragging = false;
+  const dragStart = { x: 0, y: 0 };
+  const modelStart = { x: 0, y: 0 };
 
   // --- Status helpers ---
   function setStatus(key, text, cls) {
@@ -90,6 +117,11 @@
     setStatus("state", "idle", "ok");
     setStatus("lipsync", "off");
     ui.btnSpeak.disabled = false;
+    // Free blob URL from WebSocket-delivered audio
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
   }
 
   // --- Lip sync injection ---
@@ -153,6 +185,123 @@
     });
   }
 
+  // --- WebSocket: receive AiCy audio from Python backend ---
+  // Protocol: a JSON text frame {type:"speak", text, emotion} followed by a
+  // binary frame with the mp3 bytes. We play it through the same lip-sync path.
+  function playAudioBytes(arrayBuffer) {
+    var blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = URL.createObjectURL(blob);
+    speak(currentObjectUrl);
+  }
+
+  function connectWS() {
+    setStatus("ws", "connecting...", "warn");
+    ws = new WebSocket(WS_URL);
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = function () {
+      setStatus("ws", "connected", "ok");
+      console.log("Backend connected:", WS_URL);
+    };
+
+    ws.onmessage = function (ev) {
+      if (typeof ev.data === "string") {
+        try {
+          var msg = JSON.parse(ev.data);
+          if (msg.type === "speak") pendingSpeak = msg;
+        } catch (e) {
+          console.warn("Bad control message:", ev.data);
+        }
+        return;
+      }
+      // Binary frame = audio
+      if (pendingSpeak && pendingSpeak.text) {
+        setStatus("state", "speaking: " + pendingSpeak.text.slice(0, 24), "ok");
+      }
+      pendingSpeak = null;
+      playAudioBytes(ev.data);
+    };
+
+    ws.onclose = function () {
+      setStatus("ws", "disconnected", "warn");
+      ws = null;
+      setTimeout(connectWS, 2000); // auto-reconnect
+    };
+
+    ws.onerror = function () {
+      setStatus("ws", "error", "err");
+    };
+  }
+
+  // Browsers suspend AudioContext until a user gesture. WebSocket audio can
+  // arrive without one, so resume on the first click anywhere on the page.
+  function enableAudioOnGesture() {
+    function resume() {
+      if (audioContext && audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+    }
+    document.addEventListener("click", resume);
+    document.addEventListener("keydown", resume);
+  }
+
+  // --- Zoom (mouse wheel) + pan (drag) ---
+  const MIN_SCALE = 0.02;
+  const MAX_SCALE = 5.0;
+
+  function setupZoomPan() {
+    const canvas = ui.canvas;
+    canvas.style.cursor = "grab";
+
+    // Wheel = zoom toward the cursor position
+    canvas.addEventListener(
+      "wheel",
+      function (e) {
+        if (!model) return;
+        e.preventDefault();
+        userAdjusted = true;
+
+        var factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        var oldScale = model.scale.x;
+        var newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, oldScale * factor));
+        if (newScale === oldScale) return;
+
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+        // keep the point under the cursor fixed while scaling
+        var ds = newScale / oldScale;
+        model.x = mx - (mx - model.x) * ds;
+        model.y = my - (my - model.y) * ds;
+        model.scale.set(newScale);
+      },
+      { passive: false }
+    );
+
+    // Drag = move the model
+    canvas.addEventListener("pointerdown", function (e) {
+      if (!model) return;
+      dragging = true;
+      userAdjusted = true;
+      dragStart.x = e.clientX;
+      dragStart.y = e.clientY;
+      modelStart.x = model.x;
+      modelStart.y = model.y;
+      canvas.style.cursor = "grabbing";
+    });
+    window.addEventListener("pointermove", function (e) {
+      if (!dragging || !model) return;
+      model.x = modelStart.x + (e.clientX - dragStart.x);
+      model.y = modelStart.y + (e.clientY - dragStart.y);
+    });
+    window.addEventListener("pointerup", function () {
+      if (!dragging) return;
+      dragging = false;
+      canvas.style.cursor = "grab";
+    });
+  }
+
   // --- Model setup ---
   function positionModel() {
     if (!model || !app) return;
@@ -182,16 +331,17 @@
       resolution: window.devicePixelRatio || 1,
     });
 
-    setLoading("Loading Live2D model (this may take a moment)...");
+    var selected = resolveModel();
+    setLoading("Loading Live2D model: " + selected.name + " ...");
     setStatus("state", "loading");
 
     try {
-      model = await Live2DModel.from(SAMPLE_MODEL, {
+      model = await Live2DModel.from(selected.url, {
         autoInteract: false,
       });
     } catch (e) {
       console.error("Model load failed:", e);
-      setLoading("Failed to load model. Check console.");
+      setLoading("Failed to load model (" + selected.name + "). Check console.");
       setStatus("model", "load failed", "err");
       return;
     }
@@ -199,17 +349,26 @@
     app.stage.addChild(model);
     positionModel();
 
-    setStatus("model", "Haru (sample)", "ok");
+    setStatus("model", selected.name, "ok");
     setStatus("state", "idle", "ok");
 
-    // Resize handling
-    window.addEventListener("resize", positionModel);
+    // Resize handling — keep user's zoom/pan once they've adjusted
+    window.addEventListener("resize", function () {
+      if (!userAdjusted) positionModel();
+    });
+
+    // Mouse wheel zoom + drag to move
+    setupZoomPan();
 
     // Init audio system
     initAudio();
+    enableAudioOnGesture();
 
     // Setup lip sync
     setupLipSync();
+
+    // Connect to Python backend (audio over WebSocket)
+    connectWS();
 
     // Enable buttons
     ui.btnSpeak.disabled = false;
@@ -263,13 +422,19 @@
       if (e.code === "KeyE") {
         ui.btnExpression.click();
       }
+      if (e.code === "KeyR") {
+        userAdjusted = false;
+        positionModel();
+        setStatus("state", "view reset", "ok");
+      }
     });
 
     // Hide loading overlay
     ui.loadingOverlay.classList.add("hidden");
 
     console.log("AiCy Viewer initialized.");
-    console.log("Shortcuts: [Space] speak, [M] motion, [E] expression");
+    console.log("Shortcuts: [Space] speak, [M] motion, [E] expression, [R] reset view");
+    console.log("Mouse: wheel = zoom, drag = move");
   }
 
   // --- Start ---
