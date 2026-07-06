@@ -265,6 +265,10 @@
     body.ui-hidden #status-bar,
     body.ui-hidden #controls,
     body.ui-hidden #side-panels { display: none; }
+
+    /* ?chat=1 — 방송 화면에 Live Chat 패널만 표시 (내 채팅/입력창은 숨김) */
+    body.ui-hidden.chat-overlay #side-panels { display: flex; }
+    body.ui-hidden.chat-overlay #chat-panel { display: none; }
   </style>
 </head>
 <body>

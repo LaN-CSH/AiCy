@@ -29,9 +29,11 @@
 
   // ?broadcast=1 → OBS 브라우저 소스용 클린 뷰 (아바타+자막만, H키로 복원 가능)
   // ?bg=transparent → 배경 투명 (OBS에서 다른 배경 위에 아바타 합성용)
+  // ?chat=1 → 방송 화면에 Live Chat(시청자 채팅+AiCy 답변) 패널 표시
   const _params = new URLSearchParams(window.location.search);
   const BROADCAST_MODE = _params.get("broadcast") === "1";
   const TRANSPARENT_BG = _params.get("bg") === "transparent";
+  const SHOW_CHAT_OVERLAY = _params.get("chat") === "1";
 
   const TEST_AUDIO = "../audio/tts-audio.mp3";
   const WS_URL = "ws://localhost:8765";
@@ -637,6 +639,9 @@
     // OBS 방송 모드: 컨트롤 UI 없이 시작 (자막은 유지)
     if (BROADCAST_MODE) {
       document.body.classList.add("ui-hidden");
+    }
+    if (SHOW_CHAT_OVERLAY) {
+      document.body.classList.add("chat-overlay");
     }
 
     // Hide loading overlay

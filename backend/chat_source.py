@@ -118,15 +118,17 @@ async def run_youtube_chat(video_id: str, handler) -> None:
             continue
 
         if messages:
-            # 말하는 동안 쌓인 채팅은 최신 것 하나만 처리 (밀림 방지)
+            # 모든 채팅은 화면(라이브 패널)에 표시하고, 답변은 최신 1개만 (밀림 방지)
             if len(messages) > 1:
                 skipped = ", ".join(a for a, _ in messages[:-1])
-                print(f"[yt] {len(messages) - 1}개 스킵({skipped}) — 최신 채팅만 응답")
-            author, text = messages[-1]
-            print(f"[yt] {author}: {text}")
-            try:
-                await handler(author, text)
-            except Exception as exc:  # noqa: BLE001
-                print(f"[yt] handler 오류: {exc}")
+                print(f"[yt] {len(messages) - 1}개는 표시만({skipped}) — 최신 채팅만 응답")
+            for i, (author, text) in enumerate(messages):
+                is_last = i == len(messages) - 1
+                if is_last:
+                    print(f"[yt] {author}: {text}")
+                try:
+                    await handler(author, text, respond=is_last)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[yt] handler 오류: {exc}")
 
         await asyncio.sleep(wait)

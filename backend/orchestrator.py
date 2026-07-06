@@ -223,10 +223,11 @@ async def pipeline(user_text: str, source: str = "local") -> None:
         )
 
 
-async def on_youtube_chat(author: str, text: str) -> None:
-    """유튜브 채팅 1건: 프론트 라이브 패널에 중계 후 파이프라인 실행."""
+async def on_youtube_chat(author: str, text: str, respond: bool = True) -> None:
+    """유튜브 채팅 1건: 라이브 패널에 중계하고, respond=True 일 때만 답변 생성."""
     await _broadcast_json({"type": "live_chat", "author": author, "text": text})
-    await pipeline(f"{author}: {text}", source="youtube")
+    if respond:
+        await pipeline(f"{author}: {text}", source="youtube")
 
 
 _yt_task = None
