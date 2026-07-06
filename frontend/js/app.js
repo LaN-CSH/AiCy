@@ -30,10 +30,13 @@
   // ?broadcast=1 → OBS 브라우저 소스용 클린 뷰 (아바타+자막만, H키로 복원 가능)
   // ?bg=transparent → 배경 투명 (OBS에서 다른 배경 위에 아바타 합성용)
   // ?chat=1 → 방송 화면에 Live Chat(시청자 채팅+AiCy 답변) 패널 표시
+  // ?mute=1 → 이 창은 소리 출력 안 함 (립싱크는 유지) — 컨트롤용 브라우저 창에서
+  //           OBS와 소리가 겹치지 않게 할 때 사용
   const _params = new URLSearchParams(window.location.search);
   const BROADCAST_MODE = _params.get("broadcast") === "1";
   const TRANSPARENT_BG = _params.get("bg") === "transparent";
   const SHOW_CHAT_OVERLAY = _params.get("chat") === "1";
+  const MUTED = _params.get("mute") === "1";
 
   const TEST_AUDIO = "../audio/tts-audio.mp3";
   const WS_URL = "ws://localhost:8765";
@@ -102,7 +105,10 @@
     audioElement.crossOrigin = "anonymous";
     audioSource = audioContext.createMediaElementSource(audioElement);
     audioSource.connect(analyser);
-    analyser.connect(audioContext.destination);
+    // mute 모드: 분석기(립싱크)까지만 연결하고 스피커로는 안 보냄
+    if (!MUTED) {
+      analyser.connect(audioContext.destination);
+    }
 
     audioElement.addEventListener("ended", onAudioEnd);
     audioElement.addEventListener("pause", onAudioEnd);
@@ -313,7 +319,7 @@
           if (msg.type === "speak") pendingSpeak = msg;
           if (msg.type === "config") {
             // 백엔드가 알려주는 실제 구성 (TTS 백엔드 · 언어)
-            setStatus("tts", msg.tts + " · " + msg.lang, "ok");
+            setStatus("tts", msg.tts + " · " + msg.lang + (MUTED ? " · 🔇" : ""), "ok");
             console.log("Backend config:", msg);
           }
           if (msg.type === "live_chat") {
