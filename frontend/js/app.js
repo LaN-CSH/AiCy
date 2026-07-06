@@ -12,7 +12,8 @@
   //   ?model=<url> → any model3.json path/URL
   // Default 'xl' is self-hosted under frontend/models/ (gitignored).
   const MODELS = {
-    xl: { url: "models/xl/xl.model3.json", name: "xl (VTS)" },
+    // hide: 이 모델에서 기본으로 숨길 파츠 (Part32 = 떠다니는 토끼 장식)
+    xl: { url: "models/xl/xl.model3.json", name: "xl (VTS)", hide: ["Part32"] },
     haru: {
       url: "https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display/test/assets/haru/haru_greeter_t03.model3.json",
       name: "Haru (sample)",
@@ -613,6 +614,9 @@
     app.stage.addChild(model);
     positionModel();
     restoreView(); // 저장된 줌/위치가 있으면 복원 (OBS 리로드 대응)
+
+    // 모델별 기본 숨김 파츠 적용 (URL ?hide= 와 병행)
+    (selected.hide || []).forEach(function (id) { hiddenParts.add(id); });
 
     setStatus("model", selected.name, "ok");
     setStatus("state", "idle", "ok");
