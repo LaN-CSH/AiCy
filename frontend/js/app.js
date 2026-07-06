@@ -318,6 +318,10 @@
             // 방송 시청자 채팅 → 아래 라이브 패널
             addLiveMsg(msg.author, msg.text, false);
           }
+          if (msg.type === "view") {
+            // 다른 클라이언트(브라우저)에서 조절한 아바타 뷰를 그대로 반영
+            applyNormView(msg);
+          }
         } catch (e) {
           console.warn("Bad control message:", ev.data);
         }
@@ -370,26 +374,58 @@
   // --- Zoom (mouse wheel) + pan (drag) ---
   const MIN_SCALE = 0.02;
   const MAX_SCALE = 5.0;
-  const VIEW_KEY = "aicy-view"; // 줌/위치 저장 (OBS 소스 리로드에도 유지)
+  const VIEW_KEY = "aicy-view"; // 로컬 백업 (백엔드 꺼져 있을 때용)
+  let viewSendTimer = null;
+
+  // 뷰는 창 크기와 무관한 정규화 좌표로 다룬다:
+  //   nx, ny = 화면 대비 위치 비율, s = 자동맞춤 배율 대비 상대 배율
+  // → 브라우저 창과 OBS(1920x1080)가 달라도 같은 프레이밍이 된다.
+  function baseScale() {
+    var nw = model.width / model.scale.x;
+    var nh = model.height / model.scale.y;
+    return Math.min(
+      (app.screen.width / nw) * 0.5,
+      (app.screen.height / nh) * 0.75
+    );
+  }
+
+  function currentNormView() {
+    return {
+      nx: model.x / app.screen.width,
+      ny: model.y / app.screen.height,
+      s: model.scale.x / baseScale(),
+    };
+  }
+
+  function applyNormView(v) {
+    if (!model || !v || typeof v.s !== "number") return;
+    model.anchor.set(0.5, 0.5);
+    model.x = v.nx * app.screen.width;
+    model.y = v.ny * app.screen.height;
+    model.scale.set(v.s * baseScale());
+    userAdjusted = true;
+  }
 
   function saveView() {
     if (!model) return;
+    var v = currentNormView();
     try {
-      localStorage.setItem(VIEW_KEY, JSON.stringify({
-        x: model.x, y: model.y, s: model.scale.x,
-      }));
-    } catch (e) { /* storage 불가 환경은 무시 */ }
+      localStorage.setItem(VIEW_KEY, JSON.stringify(v));
+    } catch (e) { /* storage 불가 환경 무시 */ }
+    // 백엔드로 전송 → 다른 클라이언트(OBS 소스)에 실시간 반영 (150ms 디바운스)
+    if (viewSendTimer) clearTimeout(viewSendTimer);
+    viewSendTimer = setTimeout(function () {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "view", nx: v.nx, ny: v.ny, s: v.s }));
+      }
+    }, 150);
   }
 
   function restoreView() {
     try {
       var v = JSON.parse(localStorage.getItem(VIEW_KEY));
-      if (!v || typeof v.s !== "number") return false;
-      model.anchor.set(0.5, 0.5);
-      model.x = v.x;
-      model.y = v.y;
-      model.scale.set(v.s);
-      userAdjusted = true;
+      if (!v || typeof v.nx !== "number") return false; // 구형식/없음
+      applyNormView(v);
       return true;
     } catch (e) {
       return false;

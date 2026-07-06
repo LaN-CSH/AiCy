@@ -14,6 +14,7 @@ YouTube/Chzzk 입력을 끼우면 된다(기획서 3번 'ChatSource 인터페이
 
 import asyncio
 import json
+import os
 import re
 import sys
 
@@ -26,6 +27,30 @@ from backend.config import config
 
 _clients: set = set()
 _brain = None  # 지연 초기화: OpenAI 키는 첫 메시지 처리 때만 필요(서버 부팅엔 불필요)
+
+# 아바타 뷰(줌/위치) 상태 — 모든 클라이언트(브라우저·OBS 소스)에 동기화 + 파일 보존
+_VIEW_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".view.json")
+_view = None
+
+
+def _load_view() -> None:
+    global _view
+    try:
+        with open(_VIEW_FILE, encoding="utf-8") as f:
+            _view = json.load(f)
+    except (OSError, ValueError):
+        _view = None
+
+
+def _save_view() -> None:
+    try:
+        with open(_VIEW_FILE, "w", encoding="utf-8") as f:
+            json.dump(_view, f)
+    except OSError as exc:
+        print(f"[view] 저장 실패: {exc}")
+
+
+_load_view()
 
 
 def _get_brain() -> Brain:
@@ -45,9 +70,11 @@ async def _handler(ws) -> None:
     """프론트 연결 1개를 관리.
 
     수신 프로토콜(프론트 → 백엔드, JSON 텍스트 프레임):
-        {"type": "chat",  "text": "..."}  → 파이프라인 실행(콘솔 입력과 동일 경로)
-        {"type": "reset"}                 → 대화기록 초기화
+        {"type": "chat",  "text": "..."}      → 파이프라인 실행(콘솔 입력과 동일 경로)
+        {"type": "reset"}                     → 대화기록 초기화
+        {"type": "view", "nx","ny","s"}       → 아바타 뷰 동기화(다른 클라이언트에 중계+보존)
     """
+    global _view
     _clients.add(ws)
     print(f"[ws] 프론트 연결됨 (총 {len(_clients)})")
     # 접속 즉시 백엔드 구성 통지 → 프론트 상태바에 표시
@@ -57,6 +84,9 @@ async def _handler(ws) -> None:
         "lang": config.LANG,
         "llm": config.LLM_MODEL,
     }))
+    # 저장된 아바타 뷰가 있으면 전달 (OBS 소스가 마지막 프레이밍으로 시작)
+    if _view:
+        await ws.send(json.dumps({"type": "view", **_view}))
     try:
         async for raw in ws:
             if isinstance(raw, bytes):
@@ -78,6 +108,22 @@ async def _handler(ws) -> None:
                 if _brain is not None:
                     _brain.reset()
                 print("[brain] 대화기록 초기화됨")
+            elif msg.get("type") == "view":
+                try:
+                    _view = {"nx": float(msg["nx"]), "ny": float(msg["ny"]),
+                             "s": float(msg["s"])}
+                except (KeyError, TypeError, ValueError):
+                    continue
+                _save_view()
+                # 보낸 클라이언트를 제외한 모두에게 중계 (브라우저 → OBS 실시간 반영)
+                relay = json.dumps({"type": "view", **_view})
+                for other in list(_clients):
+                    if other is ws:
+                        continue
+                    try:
+                        await other.send(relay)
+                    except Exception:  # noqa: BLE001
+                        _clients.discard(other)
     finally:
         _clients.discard(ws)
         print(f"[ws] 프론트 연결 해제 (총 {len(_clients)})")

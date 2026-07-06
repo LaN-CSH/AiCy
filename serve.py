@@ -2,6 +2,9 @@
 
 Run:  python serve.py
 Open: http://localhost:8080/frontend/
+
+멀티스레드 서버: 브라우저·OBS 브라우저 소스가 동시에 붙어도 안 막히고,
+죽은 연결이 있어도 Ctrl+C 가 즉시 듣는다.
 """
 
 import http.server
@@ -22,13 +25,20 @@ handler.extensions_map.update({
     ".wasm": "application/wasm",
 })
 
-server = http.server.HTTPServer(("", PORT), handler)
+
+class _Server(http.server.ThreadingHTTPServer):
+    daemon_threads = True  # 연결 스레드가 종료를 붙잡지 않게
+    allow_reuse_address = True
+
+
+server = _Server(("", PORT), handler)
 
 url = f"http://localhost:{PORT}/frontend/"
 print(f"AiCy Viewer running at {url}")
 print("Press Ctrl+C to stop.\n")
 
-threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+if "--no-browser" not in sys.argv:
+    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
 try:
     server.serve_forever()

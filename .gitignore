@@ -18,6 +18,9 @@ node_modules/
 # Legacy runtime output
 conv.json
 
+# 아바타 뷰 상태 (로컬 프레이밍)
+.view.json
+
 # TTS 실험 산출물
 chatterbox-*.wav
 chatterbox-*.mp3
