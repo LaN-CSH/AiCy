@@ -370,6 +370,31 @@
   // --- Zoom (mouse wheel) + pan (drag) ---
   const MIN_SCALE = 0.02;
   const MAX_SCALE = 5.0;
+  const VIEW_KEY = "aicy-view"; // 줌/위치 저장 (OBS 소스 리로드에도 유지)
+
+  function saveView() {
+    if (!model) return;
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify({
+        x: model.x, y: model.y, s: model.scale.x,
+      }));
+    } catch (e) { /* storage 불가 환경은 무시 */ }
+  }
+
+  function restoreView() {
+    try {
+      var v = JSON.parse(localStorage.getItem(VIEW_KEY));
+      if (!v || typeof v.s !== "number") return false;
+      model.anchor.set(0.5, 0.5);
+      model.x = v.x;
+      model.y = v.y;
+      model.scale.set(v.s);
+      userAdjusted = true;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   function setupZoomPan() {
     const canvas = ui.canvas;
@@ -396,6 +421,7 @@
         model.x = mx - (mx - model.x) * ds;
         model.y = my - (my - model.y) * ds;
         model.scale.set(newScale);
+        saveView();
       },
       { passive: false }
     );
@@ -420,6 +446,7 @@
       if (!dragging) return;
       dragging = false;
       canvas.style.cursor = "grab";
+      saveView();
     });
   }
 
@@ -473,6 +500,7 @@
 
     app.stage.addChild(model);
     positionModel();
+    restoreView(); // 저장된 줌/위치가 있으면 복원 (OBS 리로드 대응)
 
     setStatus("model", selected.name, "ok");
     setStatus("state", "idle", "ok");
@@ -560,6 +588,7 @@
       }
       if (e.code === "KeyR") {
         userAdjusted = false;
+        try { localStorage.removeItem(VIEW_KEY); } catch (err) {}
         positionModel();
         setStatus("state", "view reset", "ok");
       }
