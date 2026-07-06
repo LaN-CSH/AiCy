@@ -79,6 +79,7 @@
   let mouthParamIndex = -1;
   let expressionIndex = 0;
   let hiddenParts = new Set(HIDE_PARTS); // 숨길 파츠 ID (런타임 토글 가능)
+  let forcedParams = {}; // 매 프레임 강제할 파라미터 {id: value} — 장식 토글 실험용
   let ws = null;
   let pendingSpeak = null;
   let currentObjectUrl = null;
@@ -196,6 +197,10 @@
           }
         }
       }
+      // 강제 파라미터 (장식물 토글 실험: aicyParam)
+      for (var fid in forcedParams) {
+        try { coreModel.setParameterValueById(fid, forcedParams[fid]); } catch (e) {}
+      }
       origUpdate();
     };
 
@@ -212,6 +217,39 @@
     };
     window.aicyHide = function (id) { hiddenParts.add(id); return "hidden: " + id; };
     window.aicyShow = function (id) { hiddenParts.delete(id); return "shown: " + id; };
+
+    // 파츠 스위프: 전 파츠를 하나씩 잠깐 숨겨가며 순회 — 대상이 사라지는 순간의 ID 확인
+    window.aicySweepParts = function (ms) {
+      ms = ms || 800;
+      var ids = [];
+      for (var i = 0; i < internalModel.parts.count; i++) {
+        ids.push(internalModel.parts.ids[i]);
+      }
+      var keep = new Set(hiddenParts); // 기존 숨김 보존
+      var idx = 0;
+      var timer = setInterval(function () {
+        hiddenParts = new Set(keep);
+        if (idx >= ids.length) {
+          clearInterval(timer);
+          console.log("== 스위프 끝 ==");
+          return;
+        }
+        hiddenParts.add(ids[idx]);
+        console.log("지금 숨긴 파츠:", ids[idx], "(" + (idx + 1) + "/" + ids.length + ")");
+        idx++;
+      }, ms);
+      return "파츠 " + ids.length + "개 스위프 시작 (" + ms + "ms 간격) — 토끼가 사라지는 순간의 ID를 기록하세요";
+    };
+
+    // 파라미터 강제: aicyParam("Param41", 30) / 해제: aicyParam("Param41", null)
+    window.aicyParam = function (id, v) {
+      if (v === null || v === undefined) {
+        delete forcedParams[id];
+        return "released: " + id;
+      }
+      forcedParams[id] = v;
+      return "forced: " + id + " = " + v;
+    };
 
     console.log(
       "Lip sync ready (ParamMouthOpenY at index " + mouthParamIndex + ")"
