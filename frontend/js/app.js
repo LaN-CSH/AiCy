@@ -27,6 +27,12 @@
     return MODELS[DEFAULT_MODEL_KEY];
   }
 
+  // ?broadcast=1 → OBS 브라우저 소스용 클린 뷰 (아바타+자막만, H키로 복원 가능)
+  // ?bg=transparent → 배경 투명 (OBS에서 다른 배경 위에 아바타 합성용)
+  const _params = new URLSearchParams(window.location.search);
+  const BROADCAST_MODE = _params.get("broadcast") === "1";
+  const TRANSPARENT_BG = _params.get("bg") === "transparent";
+
   const TEST_AUDIO = "../audio/tts-audio.mp3";
   const WS_URL = "ws://localhost:8765";
   const BG_COLOR = 0x0d0d1a;
@@ -441,10 +447,14 @@
       view: ui.canvas,
       resizeTo: window,
       backgroundColor: BG_COLOR,
+      backgroundAlpha: TRANSPARENT_BG ? 0 : 1,
       antialias: true,
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
     });
+    if (TRANSPARENT_BG) {
+      document.body.style.background = "transparent";
+    }
 
     var selected = resolveModel();
     setLoading("Loading Live2D model: " + selected.name + " ...");
@@ -558,6 +568,11 @@
         document.body.classList.toggle("ui-hidden");
       }
     });
+
+    // OBS 방송 모드: 컨트롤 UI 없이 시작 (자막은 유지)
+    if (BROADCAST_MODE) {
+      document.body.classList.add("ui-hidden");
+    }
 
     // Hide loading overlay
     ui.loadingOverlay.classList.add("hidden");
