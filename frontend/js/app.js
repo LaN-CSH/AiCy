@@ -37,6 +37,9 @@
   const TRANSPARENT_BG = _params.get("bg") === "transparent";
   const SHOW_CHAT_OVERLAY = _params.get("chat") === "1";
   const MUTED = _params.get("mute") === "1";
+  // ?hide=PartId1,PartId2 → 모델의 특정 파츠 숨김 (장식물 제거 등)
+  //   파츠 목록 보기: 콘솔에서 aicyParts()  /  즉석 테스트: aicyHide("Part35")
+  const HIDE_PARTS = (_params.get("hide") || "").split(",").filter(Boolean);
 
   const TEST_AUDIO = "../audio/tts-audio.mp3";
   const WS_URL = "ws://localhost:8765";
@@ -75,6 +78,7 @@
   let smoothedVolume = 0;
   let mouthParamIndex = -1;
   let expressionIndex = 0;
+  let hiddenParts = new Set(HIDE_PARTS); // 숨길 파츠 ID (런타임 토글 가능)
   let ws = null;
   let pendingSpeak = null;
   let currentObjectUrl = null;
@@ -183,12 +187,38 @@
           raw * (1 - LIP_SYNC_SMOOTHING);
         coreModel.setParameterValueByIndex(mouthParamIndex, smoothedVolume);
       }
+      // 숨김 파츠: 매 프레임 불투명도 0 강제 (모션이 되살려도 다시 끔)
+      if (hiddenParts.size > 0 && internalModel && internalModel.parts) {
+        var parts = internalModel.parts;
+        for (var pi = 0; pi < parts.count; pi++) {
+          if (hiddenParts.has(parts.ids[pi])) {
+            parts.opacities[pi] = 0;
+          }
+        }
+      }
       origUpdate();
     };
+
+    // 콘솔 헬퍼: 파츠 탐색/즉석 숨김 테스트용
+    window.aicyParts = function () {
+      var out = [];
+      if (internalModel && internalModel.parts) {
+        for (var i = 0; i < internalModel.parts.count; i++) {
+          out.push(internalModel.parts.ids[i]);
+        }
+      }
+      console.table(out);
+      return out;
+    };
+    window.aicyHide = function (id) { hiddenParts.add(id); return "hidden: " + id; };
+    window.aicyShow = function (id) { hiddenParts.delete(id); return "shown: " + id; };
 
     console.log(
       "Lip sync ready (ParamMouthOpenY at index " + mouthParamIndex + ")"
     );
+    if (hiddenParts.size > 0) {
+      console.log("Hidden parts:", Array.from(hiddenParts).join(", "));
+    }
   }
 
   // --- Speak ---
