@@ -151,8 +151,8 @@
       display: none;
     }
 
-    /* --- 채팅 패널 (오른쪽, 메신저형) --- */
-    #chat-panel {
+    /* --- 오른쪽 사이드: 위(내 채팅) / 아래(방송 채팅) 2단 --- */
+    #side-panels {
       position: fixed;
       top: 16px;
       right: 16px;
@@ -161,15 +161,23 @@
       max-width: 80vw;
       display: flex;
       flex-direction: column;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    .panel {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
       background: rgba(15, 15, 30, 0.85);
       border: 1px solid rgba(100, 120, 255, 0.25);
       border-radius: 10px;
       backdrop-filter: blur(8px);
-      z-index: 10;
       overflow: hidden;
     }
 
-    #chat-header {
+    .panel-header {
       padding: 10px 14px;
       font-weight: 700;
       font-size: 14px;
@@ -177,7 +185,7 @@
       border-bottom: 1px solid rgba(100, 120, 255, 0.15);
     }
 
-    #chat-messages {
+    .panel-messages {
       flex: 1;
       overflow-y: auto;
       padding: 12px;
@@ -187,6 +195,21 @@
       scrollbar-width: thin;
       scrollbar-color: rgba(100, 120, 255, 0.3) transparent;
     }
+
+    /* 방송 채팅(아래 패널) 전용 스타일 */
+    .live-msg {
+      font-size: 13px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .live-msg .nick { color: #8892ff; font-weight: 700; margin-right: 6px; }
+    .live-msg.aicy-reply {
+      background: rgba(100, 120, 255, 0.15);
+      border-left: 3px solid #8892ff;
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .live-msg.aicy-reply .nick { color: #b0b8ff; }
 
     .msg {
       max-width: 85%;
@@ -241,7 +264,7 @@
     /* [H] 키로 방송용 UI 숨김 (자막은 유지) */
     body.ui-hidden #status-bar,
     body.ui-hidden #controls,
-    body.ui-hidden #chat-panel { display: none; }
+    body.ui-hidden #side-panels { display: none; }
   </style>
 </head>
 <body>
@@ -278,12 +301,18 @@
 
   <div id="caption"></div>
 
-  <div id="chat-panel">
-    <div id="chat-header">AiCy Chat</div>
-    <div id="chat-messages"></div>
-    <div id="chat-input-row">
-      <input id="chat-input" type="text" placeholder="AiCy에게 말 걸기... (Enter)" autocomplete="off" />
-      <button class="btn" id="chat-send">Send</button>
+  <div id="side-panels">
+    <div class="panel" id="chat-panel">
+      <div class="panel-header">AiCy Chat (나)</div>
+      <div class="panel-messages" id="chat-messages"></div>
+      <div id="chat-input-row">
+        <input id="chat-input" type="text" placeholder="AiCy에게 말 걸기... (Enter)" autocomplete="off" />
+        <button class="btn" id="chat-send">Send</button>
+      </div>
+    </div>
+    <div class="panel" id="live-panel">
+      <div class="panel-header">Live Chat (방송)</div>
+      <div class="panel-messages" id="live-messages"></div>
     </div>
   </div>
 

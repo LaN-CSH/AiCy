@@ -24,6 +24,13 @@ class Config:
     # --- 언어 (ko | en) — 페르소나/ TTS 언어 선택에 사용 ---
     LANG = os.getenv("AICY_LANG", "ko")
 
+    # --- 채팅 수집 (2단계: YouTube Live) ---
+    YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+    # 라이브 video ID(주소 watch?v= 뒤 11자). 비우면 콘솔에서 /yt <id> 로 시작
+    YT_VIDEO_ID = os.getenv("AICY_YT_VIDEO_ID", "")
+    # 폴링 최소 간격(초) — API 쿼터 절약. 실제 간격은 API 권고값과 이 값 중 큰 쪽
+    YT_POLL_MIN = float(os.getenv("AICY_YT_POLL_MIN", "5"))
+
     # --- 두뇌 (LLM) ---
     OPENAI_KEY = os.getenv("OPENAI_KEY")
     LLM_MODEL = os.getenv("AICY_LLM_MODEL", "gpt-4o")

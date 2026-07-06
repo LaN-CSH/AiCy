@@ -21,6 +21,7 @@ import websockets
 
 from backend import persona, safety, tts
 from backend.brain import Brain
+from backend.chat_source import run_youtube_chat
 from backend.config import config
 
 _clients: set = set()
@@ -82,6 +83,19 @@ async def _handler(ws) -> None:
         print(f"[ws] 프론트 연결 해제 (총 {len(_clients)})")
 
 
+async def _broadcast_json(payload: dict) -> None:
+    """오디오 없는 제어/알림 이벤트 브로드캐스트."""
+    meta = json.dumps(payload)
+    dead = set()
+    for ws in _clients:
+        try:
+            await ws.send(meta)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ws] 전송 실패, 연결 제거: {exc}")
+            dead.add(ws)
+    _clients.difference_update(dead)
+
+
 async def _broadcast_speak(
     text: str,
     audio: bytes,
@@ -89,13 +103,17 @@ async def _broadcast_speak(
     seq: int = 0,
     last: bool = True,
     full: str = None,
+    source: str = "local",
 ) -> None:
-    """speak 이벤트 1개(문장 1개) 전송. full 은 첫 조각에만 실리는 전체 답변."""
+    """speak 이벤트 1개(문장 1개) 전송. full 은 첫 조각에만 실리는 전체 답변.
+
+    source: "local"(콘솔/브라우저 직접 채팅) | "youtube"(방송 채팅에 대한 답변)
+    """
     if not _clients:
         print("[ws] 연결된 프론트 없음 — http://localhost:8080/frontend/ 를 열어주세요.")
         return
     payload = {"type": "speak", "text": text, "emotion": emotion,
-               "seq": seq, "last": last}
+               "seq": seq, "last": last, "source": source}
     if full is not None:
         payload["full"] = full
     meta = json.dumps(payload)
@@ -131,7 +149,7 @@ def _should_split() -> bool:
     return v not in ("0", "false", "no")
 
 
-async def pipeline(user_text: str) -> None:
+async def pipeline(user_text: str, source: str = "local") -> None:
     """한 번의 입력을 답변+음성까지 처리해 프론트로 보낸다.
 
     문장 분할이 켜져 있으면 문장별로 [합성→전송]을 반복 —
@@ -155,14 +173,36 @@ async def pipeline(user_text: str) -> None:
             sentence, audio, emotion,
             seq=i, last=(i == len(sentences) - 1),
             full=text if i == 0 else None,
+            source=source,
         )
 
 
+async def on_youtube_chat(author: str, text: str) -> None:
+    """유튜브 채팅 1건: 프론트 라이브 패널에 중계 후 파이프라인 실행."""
+    await _broadcast_json({"type": "live_chat", "author": author, "text": text})
+    await pipeline(f"{author}: {text}", source="youtube")
+
+
+_yt_task = None
+
+
+def _start_youtube(video_id: str) -> None:
+    """YouTube 채팅 감시 태스크 시작(기존 것이 있으면 교체)."""
+    global _yt_task
+    if _yt_task and not _yt_task.done():
+        _yt_task.cancel()
+        print("[yt] 기존 감시 중단")
+    _yt_task = asyncio.get_event_loop().create_task(
+        run_youtube_chat(video_id, on_youtube_chat)
+    )
+
+
 async def _console_loop() -> None:
-    """임시 ChatSource: 표준입력에서 한 줄씩 읽어 파이프라인에 넣는다."""
+    """콘솔 입력: 직접 대화 + 제어 명령."""
     print(
-        "\n입력 준비 완료. 메시지를 입력하세요. "
-        "(명령: /reset 대화 초기화, /quit 종료)\n"
+        "\n입력 준비 완료. 메시지를 입력하세요."
+        "\n(명령: /yt <videoId> 유튜브 채팅 연동, /yt off 중단, "
+        "/reset 대화 초기화, /quit 종료)\n"
     )
     while True:
         line = await _to_thread(sys.stdin.readline)
@@ -178,16 +218,45 @@ async def _console_loop() -> None:
                 _brain.reset()
             print("[brain] 대화기록 초기화됨")
             continue
+        if line.startswith("/yt"):
+            arg = line[3:].strip()
+            if arg == "off":
+                if _yt_task and not _yt_task.done():
+                    _yt_task.cancel()
+                    print("[yt] 감시 중단됨")
+                else:
+                    print("[yt] 실행 중인 감시 없음")
+            elif arg:
+                _start_youtube(arg)
+            else:
+                print("사용법: /yt <videoId>  또는  /yt off")
+            continue
         try:
             await pipeline(line)
         except Exception as exc:  # noqa: BLE001
             print(f"[pipeline] 오류: {exc}")
 
 
+def _preflight() -> None:
+    """시작 전 환경 점검 — 조용한 런타임 실패 대신 켤 때 크게 실패시킨다."""
+    if config.TTS_BACKEND.startswith("chatterbox"):
+        try:
+            import chatterbox  # noqa: F401
+        except ImportError:
+            raise SystemExit(
+                "\n[오류] TTS가 chatterbox 인데 이 파이썬에는 chatterbox 가 없습니다.\n"
+                "       반드시 다음으로 실행하세요:\n"
+                "       .venv311\\Scripts\\python -m backend\n"
+            )
+
+
 async def main() -> None:
+    _preflight()
     async with websockets.serve(_handler, config.WS_HOST, config.WS_PORT):
         print(f"WebSocket 서버 시작: ws://{config.WS_HOST}:{config.WS_PORT}")
         print(f"LLM={config.LLM_MODEL}  TTS={config.TTS_BACKEND}  LANG={config.LANG}")
+        if config.YT_VIDEO_ID:
+            _start_youtube(config.YT_VIDEO_ID)
         await _console_loop()
     print("종료합니다.")
 

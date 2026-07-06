@@ -49,6 +49,7 @@
     chatInput: document.getElementById("chat-input"),
     chatSend: document.getElementById("chat-send"),
     chatMessages: document.getElementById("chat-messages"),
+    liveMessages: document.getElementById("live-messages"),
     caption: document.getElementById("caption"),
   };
 
@@ -224,6 +225,23 @@
     ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
   }
 
+  // --- Live Chat panel (오른쪽 아래): 방송 시청자 채팅 + AiCy 답변 ---
+  function addLiveMsg(nick, text, isAicy) {
+    var el = document.createElement("div");
+    el.className = "live-msg" + (isAicy ? " aicy-reply" : "");
+    var nickEl = document.createElement("span");
+    nickEl.className = "nick";
+    nickEl.textContent = nick;
+    el.appendChild(nickEl);
+    el.appendChild(document.createTextNode(text));
+    ui.liveMessages.appendChild(el);
+    // 오래된 메시지 정리 (200개 유지)
+    while (ui.liveMessages.childNodes.length > 200) {
+      ui.liveMessages.removeChild(ui.liveMessages.firstChild);
+    }
+    ui.liveMessages.scrollTop = ui.liveMessages.scrollHeight;
+  }
+
   function sendChat() {
     var text = ui.chatInput.value.trim();
     if (!text) return;
@@ -290,6 +308,10 @@
             setStatus("tts", msg.tts + " · " + msg.lang, "ok");
             console.log("Backend config:", msg);
           }
+          if (msg.type === "live_chat") {
+            // 방송 시청자 채팅 → 아래 라이브 패널
+            addLiveMsg(msg.author, msg.text, false);
+          }
         } catch (e) {
           console.warn("Bad control message:", ev.data);
         }
@@ -300,7 +322,12 @@
       pendingSpeak = null;
       // 말풍선은 전체 답변으로 1회만 (첫 조각에 full 이 실려 옴)
       if (meta && meta.full) {
-        resolveAicyMsg(meta.full);
+        if (meta.source === "youtube") {
+          // 방송 채팅에 대한 답변 → 라이브 패널에 AiCy 답변으로
+          addLiveMsg("AiCy", meta.full, true);
+        } else {
+          resolveAicyMsg(meta.full);
+        }
       }
       enqueueAudio(ev.data, meta);
     };
