@@ -34,11 +34,15 @@ class _Server(http.server.ThreadingHTTPServer):
 server = _Server(("", PORT), handler)
 
 url = f"http://localhost:{PORT}/frontend/"
+# 자동으로 여는 탭 = 무음 컨트롤 패널 (소리는 OBS 브라우저 소스에서만)
+control_url = url + "?mute=1"
 print(f"AiCy Viewer running at {url}")
+print(f"  control : {control_url}")
+print(f"  OBS src : {url}?broadcast=1&chat=1")
 print("Press Ctrl+C to stop.\n")
 
 if "--no-browser" not in sys.argv:
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    threading.Timer(1.0, lambda: webbrowser.open(control_url)).start()
 
 try:
     server.serve_forever()
